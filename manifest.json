@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Activity Recorder",
+  "version": "1.0",
+  "description": "Records 15 minutes of network and console activity",
+  "permissions": [
+    "webRequest",
+    "declarativeNetRequest",
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["contentScript.js"],
+    "run_at": "document_start"
+  }]
+} 
