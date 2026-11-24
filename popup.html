@@ -1,67 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <style>
-        body {
-            width: 800px;
-            height: 600px;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-        }
-        .controls {
-            margin-bottom: 20px;
-        }
-        button {
-            padding: 8px 16px;
-            margin-right: 10px;
-            cursor: pointer;
-        }
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
-        }
-        .tab-btn {
-            padding: 8px 16px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        .tab-btn.active {
-            background: #2196f3;
-            color: white;
-        }
-        .tab-content {
-            max-height: 500px;
-            overflow-y: auto;
-        }
-        .hidden {
-            display: none;
-        }
-        .request-item {
-            background: #fff;
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-        }
-        .graphql-request {
-            border-left: 4px solid #9c27b0;
-        }
-        .console-item {
-            padding: 8px;
-            border-bottom: 1px solid #eee;
-        }
-        .console-item.error { border-left: 4px solid #f44336; }
-        .console-item.warn { border-left: 4px solid #ff9800; }
-        .console-item.info { border-left: 4px solid #2196f3; }
-    </style>
+  <meta charset="utf-8">
+  <title>Blackbox</title>
+  <link rel="stylesheet" href="ui.css">
 </head>
-<body>
-    <div id="content"></div>
-    <script src="popup.js"></script>
+<body class="popup">
+  <header>
+    <nav>
+      <button data-view="network">Network <span id="count-network">0</span></button>
+      <button data-view="graphql">GraphQL <span id="count-graphql">0</span></button>
+      <button data-view="console">Console <span id="count-console">0</span></button>
+    </nav>
+    <div class="actions">
+      <label><input type="checkbox" id="all-tabs"> All tabs</label>
+      <button id="download">Download</button>
+      <button id="clear">Clear</button>
+    </div>
+  </header>
+  <main id="list"></main>
+  <script src="ui.js"></script>
 </body>
-</html> 
+</html>

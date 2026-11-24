@@ -1,14 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Activity Recorder",
-  "version": "1.0",
-  "description": "Records 15 minutes of network and console activity",
+  "name": "Blackbox",
+  "version": "1.1.0",
+  "description": "A flight recorder for the web: keeps the last 15 minutes of network, GraphQL and console activity.",
+  "minimum_chrome_version": "111",
   "permissions": [
     "webRequest",
-    "declarativeNetRequest",
     "storage",
-    "scripting",
-    "tabs"
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -19,9 +18,20 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["contentScript.js"],
-    "run_at": "document_start"
-  }]
-} 
+  "devtools_page": "devtools.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["interceptor.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["relay.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}
