@@ -2,6 +2,8 @@
 
 A flight recorder for Chrome. Blackbox keeps a rolling record of the last 15 minutes of network requests, GraphQL operations and console output in every tab, so when something breaks you already have the evidence.
 
+> **Disclaimer: I'm a vibecoder, not a professional developer.** This extension was built with the help of AI tools and has not been professionally reviewed or audited. It is provided as-is, without any warranty (see [LICENSE](LICENSE)). **If you use it, you do so at your own risk and are responsible for any consequences**, including for any sensitive data it records from the pages you visit. Redaction of secrets is best-effort and can miss things, so check an export before you share it.
+
 ## Install
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
