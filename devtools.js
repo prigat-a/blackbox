@@ -13,7 +13,7 @@ const MAX_RESPONSE_CHARS = 500000;
 function looksLikeGraphQL(request) {
   const body = request.postData?.text;
   if (typeof body === 'string' && body.length < 1000000 &&
-      /"(query"\s*:\s*"\s*(#|query|mutation|subscription|fragment|\{)|extensions"\s*:|doc_?[iI]d")/.test(body)) return true;
+      /"(query"\s*:\s*"\s*(#|query\b|mutation\b|subscription\b|fragment\b|\{\s*[A-Za-z_])|extensions"\s*:\s*\{\s*"persistedQuery|doc_?[iI]d")/.test(body)) return true;
   try {
     const url = new URL(request.url);
     if (request.method === 'GET') return url.searchParams.has('query') || url.searchParams.has('extensions');

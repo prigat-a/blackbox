@@ -39,6 +39,23 @@
     }
   }
 
+  // Apply console format specifiers (%s %d %i %f %o %O %c) the way DevTools
+  // does, so "Loaded %s in %dms" is stored as one readable message.
+  function format(args) {
+    if (typeof args[0] !== 'string' || !args[0].includes('%')) return args.map(a => clip(describe(a)));
+    let i = 1;
+    const head = args[0].replace(/%([sdifoOc%])/g, (match, spec) => {
+      if (spec === '%') return '%';
+      if (i >= args.length) return match;
+      const arg = args[i++];
+      if (spec === 'c') return '';
+      if (spec === 'd' || spec === 'i') return String(parseInt(arg, 10));
+      if (spec === 'f') return String(parseFloat(arg));
+      return describe(arg);
+    });
+    return [head, ...args.slice(i).map(describe)].map(clip);
+  }
+
   function clip(text) {
     return text.length > MAX_ARG ? text.slice(0, MAX_ARG) + '…' : text;
   }
@@ -65,7 +82,7 @@
         const stack = level === 'error' || level === 'warn'
           ? (new Error().stack || '').split('\n').slice(2).join('\n')
           : null;
-        emit(level, args.map(a => clip(describe(a))), stack);
+        emit(level, format(args), stack);
       } catch {}
       return original.apply(this, args);
     };

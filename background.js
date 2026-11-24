@@ -177,14 +177,17 @@ function decodeBody(requestBody) {
 function looksLikeQuery(text) {
   if (typeof text !== 'string') return false;
   const code = text.replace(/^(\s*#[^\n]*\n)*/, ''); // skip leading # comments
-  return /^\s*(query|mutation|subscription|fragment|\{)/.test(code);
+  // A bare '{' only counts as shorthand query syntax ("{ me { id } }"), not
+  // JSON ('{"event_id": ...}'), which is what Sentry and others send.
+  return /^\s*((query|mutation|subscription|fragment)\b|\{\s*[A-Za-z_])/.test(code);
 }
 
 // Persisted-query clients (Apollo APQ, Relay, Meta-style doc_id) send only an
 // id and variables, without the query text.
 function persistedId(op) {
   if (op.extensions?.persistedQuery) return op.extensions.persistedQuery.sha256Hash || 'persisted';
-  const id = op.documentId ?? op.doc_id ?? op.queryId ?? (op.variables !== undefined ? op.id : undefined);
+  const id = op.documentId ?? op.doc_id ?? op.queryId ?? op.queryHash ?? op.operationId ??
+    (op.variables !== undefined ? op.id ?? op.hash : undefined);
   return typeof id === 'string' || typeof id === 'number' ? String(id) : null;
 }
 
@@ -239,14 +242,17 @@ function parseGraphQL(url, method, requestBody) {
     }
   }
 
-  ops = ops.filter(o => looksLikeQuery(o.query) || o.extensions?.persistedQuery ||
-    (persistedId(o) && 'variables' in o));
+  if (!isGraphQLEndpoint(url)) {
+    ops = ops.filter(o => looksLikeQuery(o.query) || o.extensions?.persistedQuery ||
+      (persistedId(o) && 'variables' in o));
+  }
   // An unparseable POST to a GraphQL endpoint is still worth listing.
   if (!ops.length && !(method === 'POST' && isGraphQLEndpoint(url))) return null;
 
   return {
     operations: ops.length ? ops.map(o => o.operationName || o.fb_api_req_friendly_name || inferOperationName(o.query) || 'anonymous') : ['unknown'],
-    query: clip(ops.map(o => o.query || (persistedId(o) ? `[persisted query ${persistedId(o)}]` : '')).join('\n\n'), MAX_QUERY),
+    query: clip(ops.map(o => typeof o.query === 'string' ? o.query
+      : persistedId(o) ? `[persisted query ${persistedId(o)}]` : '').join('\n\n'), MAX_QUERY),
     variables: ops.length === 1 ? redactJson(ops[0].variables ?? null)
       : ops.length ? redactJson(ops.map(o => o.variables ?? null)) : null,
     bodyKey,
