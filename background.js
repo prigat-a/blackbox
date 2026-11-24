@@ -6,7 +6,7 @@
 // change, and reloaded whenever the worker starts again.
 
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_NETWORK = 5000;
+const MAX_NETWORK = 15000;   // ~6 MB at ~410 B each
 const MAX_CONSOLE = 5000;
 const MAX_TEXT = 2000;         // one console argument
 const MAX_STACK = 4000;
@@ -94,13 +94,29 @@ async function mutate(change) {
   scheduleSave();
 }
 
+// Images, scripts, fonts and the like: the first thing to let go of.
+function isStatic(entry) {
+  return !API_TYPES.has(entry.type) && entry.type !== 'main_frame' && !entry.graphql;
+}
+
+// Drops the oldest `count` static entries.
+function dropOldestStatic(entries, count) {
+  return entries.filter(e => {
+    if (count > 0 && isStatic(e)) {
+      count--;
+      return false;
+    }
+    return true;
+  });
+}
+
 // Images, scripts and ads can fill the cap in minutes. When over it, drop the
 // oldest static resources first so API calls keep their full 15 minutes.
 function capNetwork(entries) {
   let excess = entries.length - MAX_NETWORK;
   if (excess <= 0) return entries;
   const kept = entries.filter(e => {
-    if (excess > 0 && !API_TYPES.has(e.type) && e.type !== 'main_frame' && !e.graphql) {
+    if (excess > 0 && isStatic(e)) {
       excess--;
       return false;
     }
@@ -120,17 +136,45 @@ function scheduleSave() {
   saveTimer = setTimeout(save, SAVE_DELAY_MS);
 }
 
+// What to give up, in order, when the log won't fit in storage.session's
+// 10 MB. Each step is followed by another attempt to save; the last one
+// repeats until it fits.
+const TRIM_STEPS = [
+  function halveStaticFiles(l) {
+    l.network = dropOldestStatic(l.network, Math.ceil(l.network.filter(isStatic).length / 2));
+  },
+  function dropAllStaticFiles(l) {
+    l.network = l.network.filter(e => !isStatic(e));
+  },
+  function dropLargestGraphQLResponses(l) {
+    // Free about 2 MB, biggest responses first. The request stays listed.
+    const withResponse = l.network.filter(e => e.graphql?.response).sort(
+      (a, b) => b.graphql.response.length - a.graphql.response.length);
+    let freed = 0;
+    for (const e of withResponse) {
+      if (freed > 2 * 1024 * 1024) break;
+      freed += e.graphql.response.length;
+      e.graphql.response = '[dropped: Blackbox ran out of memory]';
+    }
+  },
+  function dropOldestQuarter(l) {
+    l.network = l.network.slice(Math.floor(l.network.length / 4));
+    l.console = l.console.slice(Math.floor(l.console.length / 4));
+  }
+];
+
 async function save() {
   saveTimer = null;
   prune();
-  try {
-    await chrome.storage.session.set({ log });
-  } catch (error) {
-    // Over the storage.session quota (10 MB): drop the oldest half and retry.
-    console.warn('Blackbox: storage full, dropping oldest entries', error);
-    log.network = log.network.slice(Math.floor(log.network.length / 2));
-    log.console = log.console.slice(Math.floor(log.console.length / 2));
-    await chrome.storage.session.set({ log }).catch(() => {});
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      await chrome.storage.session.set({ log });
+      return;
+    } catch (error) {
+      const step = TRIM_STEPS[Math.min(attempt, TRIM_STEPS.length - 1)];
+      console.warn(`Blackbox: log is over the 10 MB storage limit; trimming (${step.name})`);
+      step(log);
+    }
   }
 }
 

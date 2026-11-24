@@ -186,7 +186,7 @@ async function updateSize() {
     const log = state.log;
     node.title = `Log size in memory, all tabs: ${(share * 100).toFixed(1)}% of the limit.\n` +
       `${(log.network || []).length} network and ${(log.console || []).length} console entries ` +
-      `(max 5,000 each). Oldest entries are dropped when it gets full.`;
+      `(max 15,000 network, 5,000 console). If it fills up, static files go first.`;
   } catch {
     node.textContent = '';
   }

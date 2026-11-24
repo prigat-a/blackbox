@@ -28,7 +28,8 @@ Requires Chrome 111 or later.
 ## Privacy
 
 - Records stay in memory (`chrome.storage.session`). They are never written to disk and disappear when the browser quits. Nothing is sent anywhere.
-- Entries older than 15 minutes are deleted every minute. At most 5,000 network and 5,000 console entries are kept; when the network log is full, images, scripts and other static files are dropped before API calls.
+- Entries older than 15 minutes are deleted every minute. At most 15,000 network and 5,000 console entries are kept; when the network log is full, images, scripts and other static files are dropped before API calls.
+- Chrome limits this in-memory storage to 10 MB. A typical full log is 3–7 MB. If it would go over, Blackbox frees space in this order: half the static files, the rest of the static files, the largest GraphQL responses, then the oldest quarter of everything.
 - Before anything is stored, Blackbox masks likely secrets: URL query and hash parameters named like `token`, `password`, `key`, `secret`, `auth`, `session`, `code`; JSON fields with those names in GraphQL variables and responses; `Bearer`/`Basic` credentials and JWTs in console text. This is best-effort pattern matching, so review an export before sharing it.
 
 ## Files
