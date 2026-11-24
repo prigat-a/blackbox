@@ -81,10 +81,10 @@ main { flex: 1; overflow-y: auto; }
 
 .time { color: var(--dim); font-variant-numeric: tabular-nums; flex: none; }
 .method { font-weight: 600; width: 52px; flex: none; }
-.status { width: 44px; flex: none; font-variant-numeric: tabular-nums; }
-.status.bad { color: var(--bad); width: auto; }
+.status { min-width: 44px; flex: none; font-variant-numeric: tabular-nums; }
+.status.bad { color: var(--bad); }
 .status.redirect { color: var(--redirect); }
-.status.routine { color: var(--dim); width: auto; }
+.status.routine { color: var(--dim); }
 .op { font-weight: 600; flex: none; }
 .url, .message { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dim { color: var(--dim); }

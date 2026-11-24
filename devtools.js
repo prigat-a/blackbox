@@ -2,7 +2,7 @@
 // the one thing the service worker's webRequest listeners can't see. Console
 // and network capture happen elsewhere, so they work with DevTools closed.
 
-chrome.devtools.panels.create('Blackbox', '', 'panel.html');
+chrome.devtools.panels.create('Blackbox', 'icons/icon-16.png', 'panel.html');
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
 const MAX_RESPONSE_CHARS = 500000;

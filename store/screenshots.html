@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!--
+  Store screenshots. Runs the real popup UI (../ui.js, ../ui.css) on sample
+  data with a stand-in for the chrome.* APIs, framed for the Chrome Web Store.
+  ?shot=graphql | network | console | promo     (scripts/screenshots.sh)
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../ui.css">
+<style>
+  html, body { width: 1280px; height: 800px; overflow: hidden; }
+  body.stage {
+    margin: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 48px;
+    padding: 0 56px;
+    background: radial-gradient(circle at 20% 20%, #2b2f36, #101216 70%);
+    color: #e6edf3;
+    font-family: system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  .caption { width: 300px; flex: none; }
+  .caption img { width: 72px; height: 72px; }
+  .caption h1 { font-size: 36px; line-height: 1.15; margin: 20px 0 14px; font-weight: 700; }
+  .caption p { font-size: 18px; line-height: 1.5; color: #a4adb8; margin: 0; }
+  .caption em { color: #ff8a1f; font-style: normal; }
+  .window {
+    width: 770px;
+    height: 640px;
+    flex: none;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px #30363d;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+    zoom: 1.08;
+  }
+  .window > header, .window > main { font-size: 13px; }
+
+  body.promo { width: 440px; height: 280px; padding: 0 32px; gap: 22px; }
+  body.promo .window { display: none; }
+  body.promo .caption { width: 376px; }
+  body.promo .caption img { width: 88px; height: 88px; }
+  body.promo h1 { font-size: 34px; margin: 0 0 8px; }
+  body.promo p { font-size: 15px; line-height: 1.4; }
+  body.promo .row-promo { display: flex; align-items: center; gap: 22px; }
+</style>
+</head>
+<body class="stage">
+  <div class="caption">
+    <div class="row-promo">
+      <img src="../icons/icon.svg" alt="">
+      <div>
+        <h1 id="title"></h1>
+        <p id="subtitle"></p>
+      </div>
+    </div>
+  </div>
+  <div class="window">
+    <header>
+      <nav>
+        <button data-view="network">Network <span id="count-network">0</span></button>
+        <button data-view="graphql">GraphQL <span id="count-graphql">0</span></button>
+        <button data-view="console">Console <span id="count-console">0</span></button>
+      </nav>
+      <div class="actions">
+        <span id="size" class="size"></span>
+        <label><input type="checkbox" id="all-tabs"> All tabs</label>
+        <button id="download">Download</button>
+        <button id="clear">Clear</button>
+      </div>
+    </header>
+    <main id="list"></main>
+  </div>
+
+<script>
+  const shot = new URLSearchParams(location.search).get('shot') || 'graphql';
+  const copy = {
+    graphql: ['Every GraphQL call, <em>queries, variables and responses</em>', 'Operation names, persisted queries and Apollo, recorded automatically.'],
+    network: ['The last <em>15 minutes</em> of every tab', 'When something breaks, the evidence is already there. No need to reproduce it.'],
+    console: ['Console errors <em>with stack traces</em>', 'Even the ones that happened before you opened DevTools.'],
+    promo: ['Blackbox', 'Flight recorder for network, GraphQL and console logs']
+  }[shot];
+  document.getElementById('title').innerHTML = copy[0];
+  document.getElementById('subtitle').textContent = copy[1];
+  if (shot === 'promo') {
+    document.body.className = 'stage promo';
+    document.documentElement.style.width = '440px';
+    document.documentElement.style.height = '280px';
+  }
+
+  // Sample data: a shop app, recorded over the last few minutes.
+  const t0 = new Date(); t0.setHours(14, 2, 5, 0);
+  let clock = +t0;
+  const at = step => (clock += step);
+  const TAB = 7;
+  const net = [];
+  const con = [];
+  let n = 0;
+  const add = (method, url, type, status, step, extra = {}) =>
+    net.push({ id: 'r' + n++, ts: at(step), tabId: TAB, method, url, type, status, error: null, fromCache: false, graphql: null, ...extra });
+  const gql = (op, query, variables, response, step, status = 200) =>
+    add('POST', 'https://shop.example.com/api/graphql', 'xmlhttprequest', status, step,
+      { graphql: { operations: [op], query, variables, bodyKey: null, response: response && JSON.stringify(response, null, 2) } });
+  const log = (level, messages, step, stack = null) =>
+    con.push({ id: 'c' + con.length, ts: at(step), tabId: TAB, frameUrl: 'https://shop.example.com/cart', level, messages, stack });
+
+  add('GET', 'https://shop.example.com/cart', 'main_frame', 200, 0);
+  add('GET', 'https://shop.example.com/assets/app-3f9c2a.js', 'script', 200, 80);
+  add('GET', 'https://shop.example.com/assets/app-3f9c2a.css', 'stylesheet', 200, 10);
+  add('GET', 'https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2', 'font', 200, 40);
+  log('info', ['[app] booting v4.18.2 (production)'], 30);
+  gql('Viewer', 'query Viewer {\n  viewer {\n    id\n    name\n    plan\n  }\n}', null,
+    { data: { viewer: { id: 'u_4821', name: 'Dana', plan: 'PRO' } } }, 120);
+  add('GET', 'https://shop.example.com/api/session?token=[redacted]', 'xmlhttprequest', 200, 30);
+  gql('GetCart', 'query GetCart($id: ID!) {\n  cart(id: $id) {\n    items { sku quantity price { amount currency } }\n    total { amount currency }\n  }\n}',
+    { id: 'cart_91f2' },
+    { data: { cart: { items: [{ sku: 'TEE-BLK-M', quantity: 2, price: { amount: 24, currency: 'EUR' } }, { sku: 'MUG-WHT', quantity: 1, price: null }], total: { amount: 48, currency: 'EUR' } } } }, 60);
+  log('log', ['Download the Apollo DevTools for a better development experience: https://chrome.google.com/webstore/detail/apollo-client-devtools'], 20);
+  add('GET', 'https://cdn.shop.example.com/img/tee-black.webp', 'image', 200, 50);
+  add('GET', 'https://cdn.shop.example.com/img/mug-white.webp', 'image', 200, 8);
+  log('error', ["TypeError: Cannot read properties of null (reading 'amount')"], 90,
+    "    at formatPrice (https://shop.example.com/assets/app-3f9c2a.js:1:48211)\n    at CartLine (https://shop.example.com/assets/app-3f9c2a.js:1:51907)\n    at renderWithHooks (https://shop.example.com/assets/vendor-a81c.js:2:13342)");
+  add('POST', 'https://www.google-analytics.com/g/collect?v=2&tid=G-XXXX', 'ping', 204, 300);
+  gql('SearchProducts', 'query SearchProducts($q: String!, $first: Int) {\n  search(query: $q, first: $first) {\n    totalCount\n    nodes { sku title }\n  }\n}',
+    { q: 'black hoodie', first: 24 }, { data: { search: { totalCount: 3, nodes: [{ sku: 'HOOD-BLK-S', title: 'Black hoodie' }] } } }, 2200);
+  add('GET', 'https://cdn.shop.example.com/img/hoodie-black.webp', 'image', 200, 120);
+  log('warn', ['[cart] price missing for sku MUG-WHT, falling back to 0'], 700,
+    '    at normalizeCart (https://shop.example.com/assets/app-3f9c2a.js:1:47788)');
+  gql('AddToCart', 'mutation AddToCart($sku: String!, $qty: Int!) {\n  addToCart(sku: $sku, quantity: $qty) {\n    cart { id total { amount } }\n  }\n}',
+    { sku: 'HOOD-BLK-S', qty: 1 },
+    { errors: [{ message: 'Inventory service timed out', path: ['addToCart'], extensions: { code: 'UPSTREAM_TIMEOUT' } }], data: { addToCart: null } }, 4100);
+  log('error', ['[GraphQL error]: Message: Inventory service timed out, Path: addToCart'], 15,
+    '    at onError (https://shop.example.com/assets/app-3f9c2a.js:1:30215)\n    at ApolloLink.request (https://shop.example.com/assets/vendor-a81c.js:7:2210)');
+  add('GET', 'https://shop.example.com/api/inventory/HOOD-BLK-S', 'xmlhttprequest', null, 200, { error: 'net::ERR_CONNECTION_RESET' });
+  add('GET', 'https://shop.example.com/api/recommendations?for=cart_91f2', 'xmlhttprequest', 500, 400);
+  log('error', ['Failed to load resource: the server responded with a status of 500 ()'], 10);
+  gql('GetCart', 'query GetCart($id: ID!) {\n  cart(id: $id) { items { sku quantity } total { amount } }\n}', { id: 'cart_91f2' },
+    { data: { cart: { items: [{ sku: 'TEE-BLK-M', quantity: 2 }], total: { amount: 48 } } } }, 900);
+  add('GET', 'https://shop.example.com/assets/checkout-77d1.js', 'script', 200, 200);
+  log('log', ['[router] navigate /cart → /checkout'], 300);
+
+  const sample = { network: net, console: con };
+  const noop = { addListener() {} };
+  window.chrome = {
+    runtime: { id: 'demo', getURL: p => 'chrome-extension://demo/' + p, sendMessage: async () => {}, onMessage: noop },
+    tabs: { query: async () => [{ id: TAB, url: 'https://shop.example.com/cart' }] },
+    storage: {
+      onChanged: noop,
+      session: {
+        QUOTA_BYTES: 10485760,
+        get: async () => ({ log: sample }),
+        getBytesInUse: async () => 1468006
+      }
+    }
+  };
+</script>
+<script src="../ui.js"></script>
+<script>
+  // Pick the tab and open the row each screenshot is about.
+  setTimeout(() => {
+    if (shot === 'promo') return;
+    document.querySelector(`[data-view="${shot}"]`).click();
+    const pick = { graphql: 'AddToCart', network: 'ERR_CONNECTION_RESET', console: "reading 'amount'" }[shot];
+    const row = [...document.querySelectorAll('#list details')].find(d => d.querySelector('summary').textContent.includes(pick));
+    if (row) { row.open = true; row.dispatchEvent(new Event('toggle')); }
+    document.getElementById('list').scrollTop = 0;
+  }, 200);
+</script>
+</body>
+</html>

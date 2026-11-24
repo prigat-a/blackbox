@@ -34,6 +34,13 @@ Requires Chrome 111 or later.
 - Chrome limits this in-memory storage to 10 MB. A typical full log is 3–7 MB. If it would go over, Blackbox frees space in this order: half the static files, the rest of the static files, the largest GraphQL responses, then the oldest quarter of everything.
 - Before anything is stored, Blackbox masks likely secrets: URL query and hash parameters named like `token`, `password`, `key`, `secret`, `auth`, `session`, `code`; JSON fields with those names in GraphQL variables and responses; `Bearer`/`Basic` credentials and JWTs in console text. This is best-effort pattern matching, so review an export before sharing it.
 
+## Publishing to the Chrome Web Store
+
+- `./scripts/package.sh` builds `dist/blackbox-<version>.zip` with only the files the extension needs. Bump `version` in `manifest.json` before each upload.
+- `./scripts/screenshots.sh` renders the store screenshots and promo tile into `store/` (needs Google Chrome).
+- [`store/LISTING.md`](store/LISTING.md) has the description, permission justifications, data-use answers and reviewer notes to paste into the Developer Dashboard.
+- [`PRIVACY.md`](PRIVACY.md) is the privacy policy the store requires.
+
 ## Files
 
 | File | Role |
@@ -43,3 +50,5 @@ Requires Chrome 111 or later.
 | `relay.js` | Forwards console entries from the page to the service worker |
 | `devtools.js` | Adds the DevTools panel and captures GraphQL response bodies |
 | `ui.js`, `ui.css` | The view shared by `popup.html` and `panel.html` |
+| `icons/` | Extension icons; `icon.svg` is the source |
+| `store/`, `scripts/`, `PRIVACY.md` | Chrome Web Store assets and tooling (not part of the extension package) |
