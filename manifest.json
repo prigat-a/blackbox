@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Blackbox",
+  "name": "Blackbox: Network, GraphQL & Console Recorder",
+  "short_name": "Blackbox",
   "version": "1.1.0",
-  "description": "A flight recorder for the web: keeps the last 15 minutes of network, GraphQL and console activity.",
+  "description": "Debugging flight recorder: keeps the last 15 minutes of network requests, GraphQL calls and console logs. Export for bug reports.",
   "minimum_chrome_version": "111",
   "permissions": [
     "webRequest",
@@ -16,7 +17,8 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "Blackbox"
   },
   "devtools_page": "devtools.html",
   "content_scripts": [
