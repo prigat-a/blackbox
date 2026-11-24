@@ -14,6 +14,7 @@ Requires Chrome 111 or later.
 
 - **Toolbar popup:** shows what was recorded for the current tab. Tick **All tabs** to see everything.
 - **DevTools → Blackbox panel:** the same view for the inspected tab. While DevTools is open on a tab, GraphQL response bodies are recorded too.
+- The header shows how much memory the log uses (for example `1.4 MB / 10 MB`, across all tabs); hover it for entry counts. It turns amber above 80%.
 - **Download** saves the current view as JSON. **Clear** deletes the current tab's records, or all records when **All tabs** is ticked.
 
 ## What it records

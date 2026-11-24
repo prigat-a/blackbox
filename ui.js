@@ -166,11 +166,37 @@ function render() {
   list.scrollTop = atBottom ? list.scrollHeight : scrollTop;
 }
 
+// --- storage size ----------------------------------------------------------
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB`;
+}
+
+// How much of chrome.storage.session (10 MB, shared by all tabs) the log uses.
+async function updateSize() {
+  const node = $('size');
+  try {
+    const used = await chrome.storage.session.getBytesInUse('log');
+    const quota = chrome.storage.session.QUOTA_BYTES || 10 * 1024 * 1024;
+    const share = used / quota;
+    node.textContent = `${formatBytes(used)} / ${formatBytes(quota)}`;
+    node.className = 'size' + (share > 0.8 ? ' high' : '');
+    const log = state.log;
+    node.title = `Log size in memory, all tabs: ${(share * 100).toFixed(1)}% of the limit.\n` +
+      `${(log.network || []).length} network and ${(log.console || []).length} console entries ` +
+      `(max 5,000 each). Oldest entries are dropped when it gets full.`;
+  } catch {
+    node.textContent = '';
+  }
+}
+
 let renderQueued = false;
 function queueRender() {
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; render(); });
+  requestAnimationFrame(() => { renderQueued = false; render(); updateSize(); });
 }
 
 // --- actions ---------------------------------------------------------------
@@ -238,6 +264,7 @@ async function init() {
   const { log } = await chrome.storage.session.get('log');
   if (log) state.log = log;
   render();
+  updateSize();
 }
 
 init();

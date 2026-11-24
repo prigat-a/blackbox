@@ -58,6 +58,8 @@ button:hover { background: var(--hover); }
 nav button { border-color: transparent; }
 nav button.active { color: var(--accent); border-color: var(--accent); }
 nav button span { color: var(--dim); font-variant-numeric: tabular-nums; }
+.size { color: var(--dim); font-variant-numeric: tabular-nums; margin-right: 6px; white-space: nowrap; }
+.size.high { color: var(--warn); }
 label { display: flex; align-items: center; gap: 4px; margin-right: 6px; color: var(--dim); }
 
 main { flex: 1; overflow-y: auto; }
