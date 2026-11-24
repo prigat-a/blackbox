@@ -94,9 +94,24 @@ async function mutate(change) {
   scheduleSave();
 }
 
+// Images, scripts and ads can fill the cap in minutes. When over it, drop the
+// oldest static resources first so API calls keep their full 15 minutes.
+function capNetwork(entries) {
+  let excess = entries.length - MAX_NETWORK;
+  if (excess <= 0) return entries;
+  const kept = entries.filter(e => {
+    if (excess > 0 && !API_TYPES.has(e.type) && e.type !== 'main_frame' && !e.graphql) {
+      excess--;
+      return false;
+    }
+    return true;
+  });
+  return kept.slice(-MAX_NETWORK);
+}
+
 function prune() {
   const cutoff = Date.now() - WINDOW_MS;
-  log.network = log.network.filter(e => e.ts > cutoff).slice(-MAX_NETWORK);
+  log.network = capNetwork(log.network.filter(e => e.ts > cutoff));
   log.console = log.console.filter(e => e.ts > cutoff).slice(-MAX_CONSOLE);
 }
 
@@ -160,12 +175,45 @@ function decodeBody(requestBody) {
 }
 
 function looksLikeQuery(text) {
-  return typeof text === 'string' && /^\s*(query|mutation|subscription|fragment|\{)/.test(text);
+  if (typeof text !== 'string') return false;
+  const code = text.replace(/^(\s*#[^\n]*\n)*/, ''); // skip leading # comments
+  return /^\s*(query|mutation|subscription|fragment|\{)/.test(code);
+}
+
+// Persisted-query clients (Apollo APQ, Relay, Meta-style doc_id) send only an
+// id and variables, without the query text.
+function persistedId(op) {
+  if (op.extensions?.persistedQuery) return op.extensions.persistedQuery.sha256Hash || 'persisted';
+  const id = op.documentId ?? op.doc_id ?? op.queryId ?? (op.variables !== undefined ? op.id : undefined);
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : null;
+}
+
+// A path segment named graphql or gql (/graphql, /api/graphql, /gql/v2). The
+// query string doesn't count: plenty of analytics and search URLs mention it.
+function isGraphQLEndpoint(url) {
+  try {
+    return /(^|\/)(graphql|gql)(\/|$)/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+// FNV-1a: a short fingerprint of a request body, used to match DevTools
+// responses to the right request without storing the body itself.
+function fingerprint(text) {
+  if (!text) return null;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36) + ':' + text.length;
 }
 
 // Returns { operations, query, variables } or null when this isn't GraphQL.
 function parseGraphQL(url, method, requestBody) {
   let ops = [];
+  let bodyKey = null;
   if (method === 'GET') {
     try {
       const params = new URL(url).searchParams;
@@ -177,25 +225,37 @@ function parseGraphQL(url, method, requestBody) {
     } catch {}
   } else {
     const text = decodeBody(requestBody);
+    if (requestBody?.raw) bodyKey = fingerprint(text);
     try {
       const parsed = JSON.parse(text);
       ops = (Array.isArray(parsed) ? parsed : [parsed]).filter(o => o && typeof o === 'object');
-    } catch {}
+      // Form posts (Meta-style) carry variables as a JSON string.
+      for (const o of ops) {
+        if (typeof o.variables === 'string') { try { o.variables = JSON.parse(o.variables); } catch {} }
+      }
+    } catch {
+      // Content-Type: application/graphql sends the bare query text.
+      if (looksLikeQuery(text)) ops = [{ query: text }];
+    }
   }
 
-  const isGraphQL = /graphql/i.test(url) || ops.some(o => looksLikeQuery(o.query) || o.extensions?.persistedQuery);
-  if (!isGraphQL) return null;
+  ops = ops.filter(o => looksLikeQuery(o.query) || o.extensions?.persistedQuery ||
+    (persistedId(o) && 'variables' in o));
+  // An unparseable POST to a GraphQL endpoint is still worth listing.
+  if (!ops.length && !(method === 'POST' && isGraphQLEndpoint(url))) return null;
 
   return {
-    operations: ops.map(o => o.operationName || inferOperationName(o.query) || 'anonymous'),
-    query: clip(ops.map(o => o.query || (o.extensions?.persistedQuery ? '[persisted query]' : '')).join('\n\n'), MAX_QUERY),
-    variables: ops.length === 1 ? redactJson(ops[0].variables ?? null) : redactJson(ops.map(o => o.variables ?? null)),
+    operations: ops.length ? ops.map(o => o.operationName || o.fb_api_req_friendly_name || inferOperationName(o.query) || 'anonymous') : ['unknown'],
+    query: clip(ops.map(o => o.query || (persistedId(o) ? `[persisted query ${persistedId(o)}]` : '')).join('\n\n'), MAX_QUERY),
+    variables: ops.length === 1 ? redactJson(ops[0].variables ?? null)
+      : ops.length ? redactJson(ops.map(o => o.variables ?? null)) : null,
+    bodyKey,
     response: null
   };
 }
 
 function inferOperationName(query) {
-  const match = typeof query === 'string' && query.match(/^\s*(?:query|mutation|subscription)\s+(\w+)/);
+  const match = typeof query === 'string' && query.match(/(?:^|\n)\s*(?:query|mutation|subscription)\s+(\w+)/);
   return match ? match[1] : null;
 }
 
@@ -203,9 +263,13 @@ function isOwnRequest(details) {
   return details.initiator === EXTENSION_ORIGIN;
 }
 
+// fetch() and XHR are 'xmlhttprequest'; sendBeacon is 'ping'; some workers'
+// requests show up as 'other'.
+const API_TYPES = new Set(['xmlhttprequest', 'ping', 'other']);
+
 chrome.webRequest.onBeforeRequest.addListener(
   details => {
-    if (isOwnRequest(details) || details.type !== 'xmlhttprequest') return;
+    if (isOwnRequest(details) || !API_TYPES.has(details.type)) return;
     const graphql = parseGraphQL(details.url, details.method, details.requestBody);
     if (!graphql) return;
     pending.set(details.requestId, graphql);
@@ -217,12 +281,18 @@ chrome.webRequest.onBeforeRequest.addListener(
 
 function record(details, error) {
   if (isOwnRequest(details)) return;
-  const graphql = pending.get(details.requestId) || null;
+  let graphql = pending.get(details.requestId) || null;
   pending.delete(details.requestId);
+  // The body is gone if the service worker restarted mid-request; still list
+  // the call in the GraphQL tab when the URL says what it is.
+  if (!graphql && API_TYPES.has(details.type) && details.method === 'POST' && isGraphQLEndpoint(details.url)) {
+    graphql = { operations: ['unknown'], query: '', variables: null, bodyKey: null, response: null };
+  }
   const entry = {
     id: details.requestId,
     ts: details.timeStamp,
     tabId: details.tabId,
+    initiator: details.initiator || null,
     method: details.method,
     url: redactUrl(details.url),
     type: details.type,
@@ -231,7 +301,10 @@ function record(details, error) {
     fromCache: !!details.fromCache,
     graphql
   };
-  mutate(l => l.network.push(entry));
+  mutate(l => {
+    if (graphql) graphql.response = takeEarlyResponse(entry);
+    l.network.push(entry);
+  });
 }
 
 chrome.webRequest.onCompleted.addListener(d => record(d, null), { urls: ['<all_urls>'] });
@@ -261,6 +334,33 @@ function cleanConsoleEntry(raw, sender) {
 
 // The DevTools page sees response bodies, which webRequest can't. Attach each
 // one to the request webRequest already recorded.
+// DevTools sometimes reports a response before webRequest reports the request
+// finished. Hold those briefly so record() can attach them.
+let earlyResponses = [];
+
+// Requests to one /graphql URL differ only by body, so when both sides have a
+// body fingerprint it must agree. Without one, fall back to URL and timing.
+function matches(entry, r) {
+  const key = entry.graphql?.bodyKey;
+  return entry.tabId === r.tabId && entry.url === r.url && entry.method === r.method &&
+    Math.abs(entry.ts - r.finishedMs) < 10000 &&
+    (!key || !r.bodyKey || key === r.bodyKey);
+}
+
+function matchScore(entry, r) {
+  const exact = entry.graphql?.bodyKey && entry.graphql.bodyKey === r.bodyKey;
+  return (exact ? 0 : 100000) + Math.abs(entry.ts - r.finishedMs);
+}
+
+function takeEarlyResponse(entry) {
+  earlyResponses = earlyResponses.filter(r => Date.now() - r.receivedAt < 15000);
+  let i = -1;
+  earlyResponses.forEach((r, j) => {
+    if (matches(entry, r) && (i === -1 || matchScore(entry, r) < matchScore(entry, earlyResponses[i]))) i = j;
+  });
+  return i === -1 ? null : earlyResponses.splice(i, 1)[0].response;
+}
+
 function attachGraphQLResponse(data) {
   if (!data || typeof data.url !== 'string') return;
   let response;
@@ -270,18 +370,29 @@ function attachGraphQLResponse(data) {
     response = redactText(String(data.response ?? ''));
   }
   response = clip(response, MAX_RESPONSE);
-  const url = redactUrl(data.url);
+  const r = {
+    tabId: data.tabId,
+    url: redactUrl(data.url),
+    method: data.method,
+    finishedMs: data.finishedMs,
+    bodyKey: typeof data.bodyKey === 'string' ? data.bodyKey : null,
+    response,
+    receivedAt: Date.now()
+  };
 
   mutate(l => {
     let best = null;
     for (let i = l.network.length - 1; i >= 0; i--) {
       const e = l.network[i];
-      if (!e.graphql || e.graphql.response !== null || e.tabId !== data.tabId ||
-          e.url !== url || e.method !== data.method) continue;
-      const distance = Math.abs(e.ts - data.finishedMs);
-      if (distance < 10000 && (!best || distance < best.distance)) best = { e, distance };
+      if (!e.graphql || e.graphql.response !== null || !matches(e, r)) continue;
+      // A fingerprinted response may still be waiting for its own request to
+      // finish; don't hand it to an older request that lost its body.
+      if (r.bodyKey && e.graphql.bodyKey !== r.bodyKey) continue;
+      const score = matchScore(e, r);
+      if (!best || score < best.score) best = { e, score };
     }
     if (best) best.e.graphql.response = response;
+    else if (earlyResponses.length < 200) earlyResponses.push(r);
   });
 }
 

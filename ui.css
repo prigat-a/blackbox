@@ -82,6 +82,7 @@ main { flex: 1; overflow-y: auto; }
 .status { width: 44px; flex: none; font-variant-numeric: tabular-nums; }
 .status.bad { color: var(--bad); width: auto; }
 .status.redirect { color: var(--redirect); }
+.status.routine { color: var(--dim); width: auto; }
 .op { font-weight: 600; flex: none; }
 .url, .message { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dim { color: var(--dim); }

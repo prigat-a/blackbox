@@ -10,6 +10,7 @@ const inPanel = typeof chrome.devtools !== 'undefined' && !!chrome.devtools.insp
 const state = {
   log: { network: [], console: [] },
   tabId: null,
+  tabOrigin: null,
   allTabs: false,
   view: 'network',
   expanded: new Set()
@@ -28,8 +29,16 @@ function time(ts) {
   return new Date(ts).toLocaleTimeString([], { hour12: false });
 }
 
+// Requests made by a page's service worker or shared worker have no tab
+// (tabId -1). Count them as the current tab's when they come from its origin.
 function scoped(entries) {
-  return state.allTabs || state.tabId === null ? entries : entries.filter(e => e.tabId === state.tabId);
+  if (state.allTabs || state.tabId === null) return entries;
+  return entries.filter(e => e.tabId === state.tabId ||
+    (e.tabId === -1 && state.tabOrigin && e.initiator === state.tabOrigin));
+}
+
+function originOf(url) {
+  try { return new URL(url).origin; } catch { return null; }
 }
 
 function currentData() {
@@ -44,7 +53,15 @@ function currentData() {
 // --- rows ------------------------------------------------------------------
 
 function statusCell(entry) {
-  if (entry.error) return el('span', 'status bad', entry.error.replace(/^net::/, ''));
+  if (entry.error) {
+    const name = entry.error.replace(/^net::/, '');
+    // Routine: a navigation replaced by a newer one, or a cache-only attempt
+    // that Chrome follows with a real fetch.
+    const routine = name === 'ERR_ABORTED' || name === 'ERR_CACHE_MISS';
+    const cell = el('span', 'status ' + (routine ? 'routine' : 'bad'), name);
+    if (routine) cell.title = 'Usually harmless: Chrome cancelled or retried this request itself.';
+    return cell;
+  }
   const s = entry.status;
   return el('span', 'status ' + (s >= 400 ? 'bad' : s >= 300 ? 'redirect' : ''), s ?? '—');
 }
@@ -187,9 +204,16 @@ function clear() {
 async function init() {
   if (inPanel) {
     state.tabId = chrome.devtools.inspectedWindow.tabId;
+    const readOrigin = () => chrome.devtools.inspectedWindow.eval('location.origin', origin => {
+      state.tabOrigin = typeof origin === 'string' ? origin : null;
+      queueRender();
+    });
+    readOrigin();
+    chrome.devtools.network.onNavigated.addListener(readOrigin);
   } else {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     state.tabId = tab?.id ?? null;
+    state.tabOrigin = tab?.url ? originOf(tab.url) : null;
   }
 
   for (const btn of document.querySelectorAll('[data-view]')) {
